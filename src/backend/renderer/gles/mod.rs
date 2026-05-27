@@ -1509,6 +1509,19 @@ impl Bind<EGLSurface> for GlesRenderer {
     }
 }
 
+impl GlesRenderer {
+    pub(crate) fn bind_and_buffer_age<'a>(&mut self, surface: &'a mut EGLSurface) -> Result<(GlesTarget<'a>, Option<usize>), GlesError> {
+        unsafe { self.egl.make_current_with_surface(surface)? }
+        let age = surface.buffer_age().map(|x| x as usize);
+
+        Ok((
+            GlesTarget(GlesTargetInternal::Surface { surface }),
+            age
+        ))
+
+    }
+}
+
 impl Bind<Dmabuf> for GlesRenderer {
     fn bind<'a>(&mut self, dmabuf: &'a mut Dmabuf) -> Result<GlesTarget<'a>, GlesError> {
         let mut bind = |dmabuf: &'a mut Dmabuf| {

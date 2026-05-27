@@ -48,12 +48,13 @@ use crate::{
         },
         input::InputEvent,
         renderer::{
-            Bind,
+            Bind, RendererSuper,
             gles::{GlesError, GlesRenderer},
         },
     },
     utils::{Clock, Monotonic, Physical, Rectangle, Size},
 };
+
 
 mod input;
 
@@ -248,6 +249,27 @@ pub struct WinitGraphicsBackend<R> {
     damage_tracking: bool,
     bind_size: Option<Size<i32, Physical>>,
     span: tracing::Span,
+}
+
+impl WinitGraphicsBackend<GlesRenderer> {
+    /// Bind the underlying window to the underlying renderer and return the age of the current buffer.
+    #[instrument(level = "trace", parent = &self.span, skip(self))]
+    #[profiling::function]
+    pub fn bind_and_buffer_age(&mut self) -> Result<(&mut GlesRenderer, <GlesRenderer as RendererSuper>::Framebuffer<'_>, Option<usize>), crate::backend::SwapBuffersError> {
+        // NOTE: we must resize before making the current context current, otherwise the back
+        // buffer will be latched. Some nvidia drivers may not like it, but a lot of wayland
+        // software does the order that way due to mesa latching back buffer on each
+        // `make_current`.
+        let window_size = self.window_size();
+        if Some(window_size) != self.bind_size {
+            self.egl_surface.resize(window_size.w, window_size.h, 0, 0);
+        }
+        self.bind_size = Some(window_size);
+
+        let (fb, age) = self.renderer.bind_and_buffer_age(&mut self.egl_surface)?;
+
+        Ok((&mut self.renderer, fb, age))
+    }
 }
 
 impl<R> WinitGraphicsBackend<R>
